@@ -404,9 +404,9 @@
          group falls back to the whole collection; empty rotates through every picture. A theme can set
          "wallpaper_moods" as an object. -->
     <string name="wallpaper_moods" translatable="false"></string>
-    <!-- Hold OK on a tile opens a small menu: Move (picks the tile up for reordering), Remove from Home (only with
-         app_library) and App info. On by default since 3.3; false keeps the old behaviour: holding OK opens the app's
-         App info page. A theme's config.json can set "tile_menu" either way. -->
+    <!-- The remote's Menu key opens a tile's management menu: Remove from Home (with app_library) and App info where available.
+         True by default; false leaves Menu unchanged. Hold OK or touch and
+         hold always picks up a tile for reordering, independently of this switch. A theme can set "tile_menu". -->
     <bool name="tile_menu">true</bool>
 
     <!-- Grid rows left visible under the dock on the home screen. 0 = dock sits at the very bottom. Tiles shrink if

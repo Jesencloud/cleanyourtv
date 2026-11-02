@@ -43,8 +43,9 @@ Click **Settings** for the TV's own settings. Hold OK on it for its menu:
   Android's has no row for, such as Xiaomi's Account & Security with the ADB switch.
 - **Module cards**, with `module_cards`.
 - **Edit dock**, with `dock_row`.
-- **Reorder apps**: OK picks an app up, the arrows move it, Back places it, and Back again finishes.
-  With `tile_menu` (on by default since 3.3), holding OK on a tile offers **Move**, which picks that app up straight away.
+- **Reorder apps**: OK picks an app up, the arrows move it, and OK or Back drops it and saves.
+  Holding OK or touching and holding a tile picks it up directly, independently of `tile_menu`.
+  That switch controls the remote's Menu key, which opens the tile's separate management menu.
 - **Restart…** while `HomeKeyService` runs, which opens the system power menu (a launcher may not
   restart the TV itself).
 

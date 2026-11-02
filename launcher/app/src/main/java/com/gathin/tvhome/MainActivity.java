@@ -1443,7 +1443,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * Reorder mode (top-bar button). While it is on, every key comes here first:
      * - nothing carried: arrows move focus as usual; OK on a tile picks it up instead of opening the app;
      *   Back ends the mode and saves the order.
-     * - a tile carried: arrows move it; Back (or OK) puts it down and the mode stays on for the next one.
+     * - a tile carried: arrows move it; Back (or OK) puts it down, saves and ends the mode.
      * Other keys (volume, Home) pass through; leaving the launcher ends the mode and saves.
      */
     @Override
@@ -1470,9 +1470,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!reordering) return super.dispatchKeyEvent(event);
         if (dockEditing) return dispatchDockEdit(event);
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        boolean released = event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled();
         int code = event.getKeyCode();
-        boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+        boolean ok = OkHold.isOkKey(code);
         boolean back = code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE;
         if (movingKey != null) {
             switch (code) {
@@ -1484,20 +1484,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     return true;
                 default:
                     if (ok || back) {
-                        if (!down) drop();
+                        if (released) {
+                            drop();
+                            endReorder();
+                        }
                         return true;
                     }
                     return super.dispatchKeyEvent(event);
             }
         }
         if (back) {
-            if (!down) endReorder();
+            if (released) endReorder();
             return true;
         }
         int pos = focusedTilePosition();
-        View focus = getCurrentFocus();
-        if (ok && focus != null && focus.getId() == R.id.btnLibrary) {
-            // The App library pill sits in the grid but is no tile: OK ends the mode (saving the order) and opens it.
+        if (ok && adapter.isLibraryAt(pos)) {
+            // The Add app tile is an action, not a movable app: finish reordering before opening the library.
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
                 endReorder();
                 onLibraryRequested();
@@ -1507,7 +1509,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (ok && grid.hasFocus()) {
             // RecyclerView can briefly report NO_POSITION during a move or rebind. Still consume
             // OK on the grid: falling through would let the focused card open its app in reorder mode.
-            if (!down && pos >= 0) pickUp(pos);
+            if (released && pos >= 0) pickUp(pos);
             return true;
         }
         return super.dispatchKeyEvent(event);   // arrows navigate; OK on a top-bar pill works as usual
@@ -1563,13 +1565,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * one step back: from choosing the app to choosing the place, and from there out of the mode.
      */
     private boolean dispatchDockEdit(KeyEvent event) {
-        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        boolean released = event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled();
         int code = event.getKeyCode();
-        boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+        boolean ok = OkHold.isOkKey(code);
         boolean back = code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE;
         if (back) {
-            if (!down) {
+            if (released) {
                 if (dockEditAppKey != null) {
                     endReorder();   // "Add to dock" cancelled before a place was chosen
                 } else if (dockEditSlot >= 0) {
@@ -1585,7 +1586,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         int pos = focusedTilePosition();
         if (ok && pos >= 0) {
-            if (!down) {
+            if (released) {
                 int n = adapter.movableCount();
                 if (dockEditAppKey != null) {
                     if (pos < Math.min(COLUMNS, n)) {
@@ -1607,30 +1608,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return true;   // never opens the app while editing
         }
         return super.dispatchKeyEvent(event);   // arrows navigate as usual
-    }
-
-    /**
-     * Edit-dock mode started from the tile menu. A dock app: its place is already chosen, so focus goes to the grid
-     * for the app to put there. A grid app: it is already chosen, so focus goes to the dock for the place.
-     */
-    private void startDockEditFor(String key, boolean inDock) {
-        if (reordering) endReorder();
-        if (!beginReorder()) return;
-        dockEditing = true;
-        int pos = adapter.positionOf(key);   // beginReorder can rebuild the tiles
-        int n = adapter.movableCount();
-        if (pos < 0) {
-            endReorder();
-        } else if (inDock) {
-            dockEditSlot = pos;
-            dimOthers();
-            focusTile(Math.min(COLUMNS, n - 1));
-            Toast.makeText(this, R.string.dock_edit_pick_app, Toast.LENGTH_LONG).show();
-        } else {
-            dockEditAppKey = key;
-            focusTile(0);
-            Toast.makeText(this, R.string.dock_edit_pick_place, Toast.LENGTH_LONG).show();
-        }
     }
 
     /** Puts the app at pos into dock place slot, and the app that was there where the chosen one was; then saves. */
@@ -3720,58 +3697,60 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * Hold OK on a tile: a glass menu next to it. Move starts reorder mode with this tile already picked up;
-     * Remove from Home takes the shortcut off (only with the app library on, where one press adds it back);
-     * App info opens the TV's page for the app, which is what holding OK used to do.
+     * Hold OK or touch and hold a tile: directly pick up the tile into reorder mode.
+     * Move with D-pad, press OK or Back to drop and save.
      */
-    // ---- hold OK ---------------------------------------------------------------------------------
-    // View's own long click misses on some remotes: an IR remote that sends its repeat frames as separate
-    // presses, or a Bluetooth one whose repeats land after a tile rebind, never holds one DOWN long enough.
-    // So the launcher times the hold itself: OK down on a tile, still down (or still repeating) after
-    // HOLD_OK_MS opens the tile menu, and the UP that follows is eaten so it doesn't also open the app.
-
-    private static final long HOLD_OK_MS = 550;
-    private long holdOkDown = -1;
-    private int holdOkPosition = -1;
-    private String holdOkKey;    // the app under OK when it went down; a tile rebuild can move another app to that slot
-    private boolean holdOkFired;
-    private final Runnable holdOkTimer = this::fireHoldOk;
-
-    private static boolean isOkKey(int code) {
-        return code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BUTTON_A;
+    @Override
+    public void onTilePickUp(int position, View card) {
+        if (reordering || openPopup != null || cardPrompt != null) return;
+        String key = adapter.keyAt(position);
+        if (key == null || position >= adapter.movableCount()) return;
+        // A native long click can win the race with the fallback. Both own only the current key's UP;
+        // for a touch long click there is no key press to claim.
+        handler.removeCallbacks(holdOkTimer);
+        okHold.fire();
+        if (card != null) card.setPressed(false);
+        if (!beginReorder()) return;
+        int at = adapter.positionOf(key);
+        if (at < 0) return;
+        focusTile(at);
+        pickUp(at);
+        Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_SHORT).show();
     }
 
-    /** True when the event belongs to a hold that opened the tile menu and must not reach the tile. */
+    // ---- hold OK ---------------------------------------------------------------------------------
+    // View's own long click can miss after a tile rebind or with repeated DOWN frames marked repeatCount=0.
+    // After 550 ms without an UP, the fallback picks up the same tile as the native callback. Only the
+    // triggering key's UP is consumed; tile_menu controls the separate Menu-key action.
+
+    private final OkHold okHold = new OkHold();
+    private int holdOkPosition = -1;
+    private String holdOkKey;    // the app under OK when it went down; a tile rebuild can move another app to that slot
+    private final Runnable holdOkTimer = this::fireHoldOk;
+
+    /** True for events already handled by a long click or interruption, so they cannot launch or drop a tile. */
     private boolean holdOk(KeyEvent event) {
-        if (!tileMenuEnabled || !isOkKey(event.getKeyCode())) return false;
+        int code = event.getKeyCode(), device = event.getDeviceId();
+        if (!OkHold.isOkKey(code)) return false;
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (event.getRepeatCount() == 0) {
-                holdOkFired = false;
+            if (okHold.down(code, device, event.getDownTime(), event.getRepeatCount())) {
                 handler.removeCallbacks(holdOkTimer);
-                holdOkPosition = reordering || openPopup != null || cardPrompt != null ? -1 : focusedTilePosition();
-                holdOkKey = holdOkPosition < 0 || holdOkPosition >= adapter.appCount() ? null : adapter.keyAt(holdOkPosition);
-                if (holdOkKey == null) {
-                    holdOkDown = -1;
-                    return false;
-                }
-                holdOkDown = event.getDownTime();
-                handler.postDelayed(holdOkTimer, HOLD_OK_MS);
-                return false;
-            }
-            if (holdOkFired) return true;
-            if (holdOkDown >= 0 && event.getEventTime() - holdOkDown >= HOLD_OK_MS) {
+                holdOkPosition = !resumed || reordering || openPopup != null || cardPrompt != null
+                        ? -1 : focusedTilePosition();
+                holdOkKey = holdOkPosition < 0 || holdOkPosition >= adapter.movableCount()
+                        ? null : adapter.keyAt(holdOkPosition);
+                if (holdOkKey != null) handler.postDelayed(holdOkTimer, OkHold.TIMEOUT_MS);
+            } else if (okHold.matches(code, device) && holdOkKey != null && okHold.due(event.getEventTime())) {
                 fireHoldOk();
-                return true;
             }
-            return false;
+            return okHold.matches(code, device) && okHold.handled();
         }
-        // ACTION_UP
+        if (event.getAction() != KeyEvent.ACTION_UP) return false;
+        if (!okHold.matches(code, device)) return event.isCanceled();
         handler.removeCallbacks(holdOkTimer);
-        holdOkDown = -1;
+        holdOkPosition = -1;
         holdOkKey = null;
-        if (holdOkFired) {
-            holdOkFired = false;
+        if (okHold.up(code, device, event.isCanceled())) {
             View f = getCurrentFocus();
             if (f != null) f.setPressed(false);
             return true;
@@ -3780,32 +3759,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * Stops timing a held OK when the launcher is paused, loses its window or goes away, so the menu can't open
+     * Stops timing a held OK when the launcher is paused, loses its window or goes away, so reorder can't start
      * behind another screen. An interrupted press still counts as handled: its UP, if it comes back here, is eaten
      * rather than opening the tile.
      */
     private void cancelHoldOk() {
         handler.removeCallbacks(holdOkTimer);
-        if (holdOkDown >= 0) holdOkFired = true;
-        holdOkDown = -1;
+        okHold.cancel();
         holdOkPosition = -1;
         holdOkKey = null;
     }
 
     private void fireHoldOk() {
         handler.removeCallbacks(holdOkTimer);
-        if (holdOkDown < 0 || holdOkFired) return;
-        holdOkFired = true;
-        if (openPopup != null || reordering) return;   // View's own long click got there first
+        if (holdOkKey == null || !okHold.fire()) return;
+        if (!resumed || openPopup != null || cardPrompt != null || reordering) return;
         int position = holdOkPosition;
         if (position < 0 || position >= adapter.appCount() || position != focusedTilePosition()) return;
         // Same slot is not enough: tiles may have been rebuilt during the hold, so the app must match too.
         if (!holdOkKey.equals(adapter.keyAt(position))) return;
         View card = getCurrentFocus();
         if (card != null) card.setPressed(false);
-        onTileLongPress(position, card);
+        onTilePickUp(position, card);
     }
 
+    /** Menu key on a tile: manage its shortcut or open App info. */
     @Override
     public void onTileLongPress(int position, View card) {
         if (reordering || openPopup != null) return;
@@ -3816,19 +3794,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         PopupWindow popup = glassPopup(panel, (int) (200 * density));
-        if (dockRow && position < adapter.movableCount()) {
-            boolean inDock = position < COLUMNS;
-            addSettingsMenuRow(rows, popup, inDock ? R.string.tile_replace_in_dock : R.string.tile_add_to_dock,
-                    () -> startDockEditFor(key, inDock));
-        }
-        if (position < adapter.movableCount()) addSettingsMenuRow(rows, popup, R.string.tile_move, () -> {
-            if (!beginReorder()) return;
-            int at = adapter.positionOf(key);   // beginReorder can rebuild the tiles
-            if (at < 0) return;
-            focusTile(at);
-            pickUp(at);
-            Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
-        });
+        // Only remove a shortcut when the library is available to add it back.
         if (appLibraryEnabled) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
             if (LibraryApps.save(this, pkg, false)) reloadApps(false);
             else Toast.makeText(this, R.string.library_save_failed, Toast.LENGTH_LONG).show();
@@ -3836,6 +3802,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Some firmware has no App info page at all; a row that only toasts "can't open" helps nobody.
         Intent info = SystemSettings.appInfo(this, pkg);
         if (info != null) addSettingsMenuRow(rows, popup, R.string.library_app_info, () -> open(info));
+        if (rows.getChildCount() == 0) {
+            // This popup will never be shown, so its dismiss listener cannot clear the reference.
+            openPopup = null;
+            return;
+        }
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
         // Dock tiles sit near the bottom of the screen: open the menu above the tile when it would not fit below.

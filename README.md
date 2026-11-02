@@ -285,7 +285,7 @@ set is in [Troubleshooting](docs/TROUBLESHOOTING.md).
 | **Themes** | Background, wallpaper and layout from a `config.json` pushed over Wi-Fi, no rebuild. Thirty ship in [`themes/`](themes/), the built-in `default/` included |
 | **31 languages** | Follows the TV's language, with a fully mirrored right-to-left layout for Hebrew |
 | **App library** | Optional: browse every installed app and add or remove Home shortcuts. See [the app library guide](docs/app-library.md) |
-| **Tile menu** | On by default (`tile_menu`): hold OK on a tile for Move and App info, plus Remove from Home when the app library is on. Off, holding OK opens App info |
+| **Tile menu** | On by default (`tile_menu`): press Menu on a tile for Remove from Home (with `app_library`) and App info where available. Holding OK directly reorders, with the switch on or off |
 | **Module cards** | Any TV app can offer its own tile; you approve each one once. See [`docs/modules.md`](docs/modules.md) |
 | **Add-ons** | Optional apps that plug in as module cards, kept in [`addons/`](addons/) and never built into the launcher |
 | **Clock screensaver** | A drifting clock over the glow, so nothing burns in |
@@ -450,9 +450,10 @@ The launcher just lists what is installed and launches it with intents that have
 <details>
 <summary><b>How do I rearrange my apps?</b></summary>
 
-Hold OK on **Settings** (top right) and choose **Reorder apps**. OK picks an app up, the arrows move it,
-Back places it, and Back again finishes. Holding OK on a tile also offers **Move** (`tile_menu`, on by default), which
-picks that app up straight away. More: [docs/launcher.md](docs/launcher.md#launcher-settings-and-the-default-home)
+Hold OK on a tile to pick it up, move it with the arrows, then press OK or Back to drop it and save.
+You can also hold OK on **Settings** (top right), choose **Reorder apps**, and press OK to pick an app up.
+The remote's Menu key opens the separate management menu (`tile_menu`, on by default).
+More: [docs/launcher.md](docs/launcher.md#launcher-settings-and-the-default-home)
 
 </details>
 

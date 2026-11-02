@@ -266,7 +266,7 @@ final class Config {
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
     final boolean handleViewInputs;
-    /** Hold OK on a tile opens a menu (Move, Remove from Home, App info) instead of App info (config.xml / theme tile_menu). */
+    /** Menu key on a tile opens its management menu; hold OK always reorders (config.xml / theme tile_menu). */
     final boolean tileMenu;
     /** With wifi_status_color, the icon orange while connected without internet (a captive portal) and red while offline (config.xml, wifi_status_warnings). */
     final boolean wifiStatusWarnings;
