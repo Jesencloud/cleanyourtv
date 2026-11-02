@@ -16,6 +16,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ChangedPackages;
 import android.content.res.ColorStateList;
+import android.media.AudioAttributes;
+import android.media.SoundPool;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -228,6 +230,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean iconOnlyVpn;
     private Drawable.ConstantState vpnPlainBackground;
     private ColorStateList vpnPlainInk;
+    private SoundPool soundPool;
+    private int soundFocusId;
+    private long lastSoundTime;
+
+    private void playAppleTvFocusSound() {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastSoundTime < 40) return;
+        lastSoundTime = now;
+        if (soundPool != null && soundFocusId != 0) {
+            soundPool.play(soundFocusId, 0.9f, 0.9f, 0, 0, 1.0f);
+        }
+    }
     private SpringAnimation springX, springY;
     private float glassTargetX, glassTargetY;
     // How far the grid has scrolled the glass. springY works without it, in grid content space, so a
@@ -333,6 +347,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean reordering;
     /** Key of the tile being carried in reorder mode, or null. */
     private String movingKey;
+    private boolean ignoreNextOkUp;
     /** Tile order when reorder mode started, to save only when something moved. */
     private List<String> orderAtStart;
     /**
@@ -457,6 +472,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         density = getResources().getDisplayMetrics().density;
+        try {
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build();
+            soundPool = new SoundPool.Builder()
+                    .setMaxStreams(2)
+                    .setAudioAttributes(attrs)
+                    .build();
+            soundFocusId = soundPool.load(this, R.raw.focus_apple_tv, 1);
+        } catch (Throwable ignored) { }
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
@@ -667,7 +693,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
         ((GridLayoutManager) grid.getLayoutManager()).setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
-            @Override public int getSpanSize(int position) { return !singleRow && adapter != null && adapter.isLibraryAt(position) ? COLUMNS : 1; }
+            @Override public int getSpanSize(int position) { return 1; }
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
@@ -931,6 +957,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
             boolean onTile = newF != null && newF.getId() == R.id.card;
             if (!onTile) hideGlass();
+            if (oldF != null && newF != null && oldF != newF) {
+                playAppleTvFocusSound();
+            }
         });
 
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -1192,8 +1221,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cancelPendingFocusScroll();
         RecyclerView.ViewHolder footer = grid.findViewHolderForAdapterPosition(adapter.appCount());
         final boolean restoreLibrary = adapter.isLibraryAt(adapter.appCount()) && footer != null
-                && footer.itemView.findViewById(R.id.btnLibrary) != null
-                && footer.itemView.findViewById(R.id.btnLibrary).hasFocus();
+                && footer.itemView.findViewById(R.id.card) != null
+                && footer.itemView.findViewById(R.id.card).hasFocus();
         // Capture the app before rebinding can move focus and overwrite its key.
         final String returnKey = lastFocusedKey;
         final int returnSlot = lastFocused;
@@ -1377,6 +1406,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RemoteKeys.release(this);
         cancelHoldOk();
         if (gameDay != null) gameDay.shutdown();
+        if (soundPool != null) {
+            soundPool.release();
+            soundPool = null;
+        }
         unregisterReceiver(packageReceiver);
         if (openOnStartOnWake) unregisterReceiver(wakeReceiver);
         wallpaperPlayer.close();
@@ -1447,6 +1480,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
                 || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
         boolean back = code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE;
+        if (ok && !down && ignoreNextOkUp) {
+            ignoreNextOkUp = false;
+            return true;
+        }
         if (movingKey != null) {
             switch (code) {
                 case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -1457,7 +1494,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     return true;
                 default:
                     if (ok || back) {
-                        if (!down) drop();
+                        if (!down) {
+                            drop();
+                            endReorder();
+                        }
                         return true;
                     }
                     return super.dispatchKeyEvent(event);
@@ -2423,7 +2463,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public boolean onTileVerticalKey(int position, int keyCode) {
-        int count = adapter.appCount();
+        int count = adapter.getItemCount();
         int target;
         if (singleRow) {
             // One row: Up leaves for the top bar, Down has nowhere to go, and Left/Right walk the whole row,
@@ -2431,22 +2471,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
             boolean forward = rtlAppGrid ? keyCode == KeyEvent.KEYCODE_DPAD_LEFT : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
-            int last = adapter.focusablePosition(count - 1);
-            if (forward && position >= last) {
-                if (adapter.isLibraryAt(count)) focusLibrary();
-                return true;
-            }
+            if (forward && position >= count - 1) return true;
             return !forward && position == 0;
         }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            boolean forward = rtlAppGrid ? keyCode == KeyEvent.KEYCODE_DPAD_LEFT : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
-            if (forward && position == adapter.focusablePosition(count - 1) && adapter.isLibraryAt(count)) {
-                focusLibrary();
-                return true;
-            }
-            // In the dock, the last app is the row's end: the empty slots after it take no focus.
             int rowCount = position < COLUMNS ? Math.min(count, adapter.dockFilled()) : count;
             return GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
@@ -2456,16 +2486,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
-            if (position >= lastRowStart) {
-                if (adapter.isLibraryAt(count)) focusLibrary();
-                return true;
-            }
+            if (position >= lastRowStart) return true;
             target = Math.min(position + COLUMNS, count - 1);
         }
         focusTile(target);
-        // The default focus search clicks for Left/Right; Up/Down are handled here, so click for them too.
-        grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_UP
-                ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
         return true;
     }
 
@@ -2606,47 +2630,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     @Override public void onLibraryUp() {
-        if (adapter.appCount() == 0) { firstTopButton().requestFocus(); return; }
-        int lastRow = ((adapter.appCount() - 1) / COLUMNS) * COLUMNS;
-        focusTile(Math.min(lastRow + lastFocused % COLUMNS, adapter.appCount() - 1));
+        int count = adapter.getItemCount();
+        if (count == 0) { firstTopButton().requestFocus(); return; }
+        int lastRow = ((count - 1) / COLUMNS) * COLUMNS;
+        focusTile(Math.min(lastRow + lastFocused % COLUMNS, count - 1));
     }
 
     private void focusLibrary() {
         cancelPendingFocusScroll();
-        int position = adapter.appCount();
-        if (!adapter.isLibraryAt(position)) return;
-        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(position);
-        if (holder != null) {
-            View button = holder.itemView.findViewById(R.id.btnLibrary);
-            Rect visible = new Rect();
-            if (button.getGlobalVisibleRect(visible) && visible.height() >= button.getHeight()) {
-                if (button.requestFocus()) libraryFocusPending = false;
-                return;
-            }
-        }
-        if (!animations) {
-            grid.scrollToPosition(position);
-            grid.post(() -> {
-                if (appLibrary != null || !hasWindowFocus()) return;
-                RecyclerView.ViewHolder footer = grid.findViewHolderForAdapterPosition(adapter.appCount());
-                if (footer != null && adapter.isLibraryAt(adapter.appCount())
-                        && footer.itemView.findViewById(R.id.btnLibrary).requestFocus()) libraryFocusPending = false;
-            });
-            return;
-        }
-        pendingFocusScroll = new RecyclerView.OnScrollListener() {
-            @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int state) {
-                if (state != RecyclerView.SCROLL_STATE_IDLE) return;
-                rv.removeOnScrollListener(this);
-                if (pendingFocusScroll != this) return;
-                pendingFocusScroll = null;
-                RecyclerView.ViewHolder footer = rv.findViewHolderForAdapterPosition(position);
-                if (footer != null && footer.itemView.findViewById(R.id.btnLibrary).requestFocus())
-                    libraryFocusPending = false;
-            }
-        };
-        grid.addOnScrollListener(pendingFocusScroll);
-        grid.smoothScrollToPosition(position);
+        int position = adapter.getItemCount() - 1;
+        if (position >= 0) focusTile(position);
     }
 
     private void cancelPendingFocusScroll() {
@@ -2660,12 +2653,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void focusTile(int position) {
         libraryFocusPending = false;
         cancelPendingFocusScroll();
-        if (adapter.appCount() == 0) {
-            if (adapter.isLibraryAt(0)) focusLibrary();
-            else firstTopButton().requestFocus();
+        int count = adapter.getItemCount();
+        if (count == 0) {
+            firstTopButton().requestFocus();
             return;
         }
-        final int pos = adapter.focusablePosition(Math.max(0, Math.min(position, adapter.appCount() - 1)));
+        final int pos = adapter.focusablePosition(Math.max(0, Math.min(position, count - 1)));
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         if (vh != null) {
             View card = vh.itemView.findViewById(R.id.card);
@@ -3729,9 +3722,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * Hold OK on a tile: a glass menu next to it. Move starts reorder mode with this tile already picked up;
-     * Remove from Home takes the shortcut off (only with the app library on, where one press adds it back);
-     * App info opens the TV's page for the app, which is what holding OK used to do.
+     * Hold OK on a tile (Apple TV style): directly pick up the tile into reorder mode.
+     * Move with D-pad, press OK or Back to drop and save.
+     */
+    @Override
+    public void onTilePickUp(int position, View card) {
+        if (reordering) return;
+        String key = adapter.keyAt(position);
+        if (key == null || position >= adapter.movableCount()) return;
+        if (!beginReorder()) return;
+        int at = adapter.positionOf(key);
+        if (at < 0) return;
+        focusTile(at);
+        pickUp(at);
+        ignoreNextOkUp = true;
+        Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Menu key on a tile: a glass management menu (Remove from Home, Uninstall).
      */
     // ---- hold OK ---------------------------------------------------------------------------------
     // View's own long click misses on some remotes: an IR remote that sends its repeat frames as separate
@@ -3825,26 +3834,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         PopupWindow popup = glassPopup(panel, (int) (200 * density));
-        if (dockRow && position < adapter.movableCount()) {
-            boolean inDock = position < COLUMNS;
-            addSettingsMenuRow(rows, popup, inDock ? R.string.tile_replace_in_dock : R.string.tile_add_to_dock,
-                    () -> startDockEditFor(key, inDock));
-        }
-        if (position < adapter.movableCount()) addSettingsMenuRow(rows, popup, R.string.tile_move, () -> {
-            if (!beginReorder()) return;
-            int at = adapter.positionOf(key);   // beginReorder can rebuild the tiles
-            if (at < 0) return;
-            focusTile(at);
-            pickUp(at);
-            Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
-        });
-        if (appLibraryEnabled) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
+        addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
             if (LibraryApps.save(this, pkg, false)) reloadApps(false);
             else Toast.makeText(this, R.string.library_save_failed, Toast.LENGTH_LONG).show();
         });
-        // Some firmware has no App info page at all; a row that only toasts "can't open" helps nobody.
-        Intent info = SystemSettings.appInfo(this, pkg);
-        if (info != null) addSettingsMenuRow(rows, popup, R.string.library_app_info, () -> open(info));
+        if (canUninstall(pkg)) {
+            addSettingsMenuRow(rows, popup, R.string.app_uninstall, () -> {
+                Intent uninstall = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + pkg));
+                open(uninstall);
+            });
+        }
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
         // Dock tiles sit near the bottom of the screen: open the menu above the tile when it would not fit below.
@@ -3863,6 +3862,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
         }
         rows.getChildAt(0).requestFocus();
+    }
+
+    private boolean canUninstall(String pkg) {
+        try {
+            ApplicationInfo ai = getPackageManager().getApplicationInfo(pkg, 0);
+            return (ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0
+                    || (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     private void addSettingsMenuRow(LinearLayout rows, PopupWindow popup, int title, Runnable action) {
