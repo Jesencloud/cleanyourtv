@@ -230,11 +230,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean iconOnlyVpn;
     private Drawable.ConstantState vpnPlainBackground;
     private ColorStateList vpnPlainInk;
+    private boolean focusSoundEnabled = true;
     private SoundPool soundPool;
     private int soundFocusId;
     private long lastSoundTime;
 
     private void playAppleTvFocusSound() {
+        if (!focusSoundEnabled) return;
         long now = SystemClock.uptimeMillis();
         if (now - lastSoundTime < 40) return;
         lastSoundTime = now;
@@ -475,17 +477,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         density = getResources().getDisplayMetrics().density;
-        try {
-            AudioAttributes attrs = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build();
-            soundPool = new SoundPool.Builder()
-                    .setMaxStreams(2)
-                    .setAudioAttributes(attrs)
-                    .build();
-            soundFocusId = soundPool.load(this, R.raw.focus_apple_tv, 1);
-        } catch (Throwable ignored) { }
+        focusSoundEnabled = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE)
+                .getBoolean("focus_sound", true);
+        if (focusSoundEnabled) {
+            try {
+                AudioAttributes attrs = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build();
+                soundPool = new SoundPool.Builder()
+                        .setMaxStreams(2)
+                        .setAudioAttributes(attrs)
+                        .build();
+                soundFocusId = soundPool.load(this, R.raw.focus_apple_tv, 1);
+            } catch (Throwable ignored) { }
+        }
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
