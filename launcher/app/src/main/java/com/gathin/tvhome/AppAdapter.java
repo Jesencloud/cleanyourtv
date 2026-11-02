@@ -398,19 +398,6 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        if (viewType == 1) {
-            View row = LayoutInflater.from(ctx).inflate(R.layout.row_app_library, parent, false);
-            View button = row.findViewById(R.id.btnLibrary);
-            button.setOnClickListener(v -> listener.onLibraryRequested());
-            button.setOnFocusChangeListener((v, focused) -> { if (focused) listener.onLibraryFocused(); });
-            button.setOnKeyListener((v, key, event) -> {
-                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (key == KeyEvent.KEYCODE_DPAD_UP) listener.onLibraryUp();
-                return key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN
-                        || key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT;
-            });
-            return new RecyclerView.ViewHolder(row) { };
-        }
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_app, parent, false);
         float density = parent.getResources().getDisplayMetrics().density;
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
@@ -458,10 +445,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     @Override
     @SuppressWarnings("deprecation")
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-        if (isLibraryAt(position)) return;
         Holder h = (Holder) holder;
-        Entry e = items.get(position);
-        if (e.kind == Entry.EMPTY) {
+        boolean library = isLibraryAt(position);
+        Entry e = library ? null : items.get(position);
+        if (e != null && e.kind == Entry.EMPTY) {
             // A free dock slot keeps its place in the row and the band, but shows nothing and takes no focus.
             h.card.setVisibility(View.INVISIBLE);
             h.card.setFocusable(false);
@@ -470,24 +457,45 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             h.icon.setImageDrawable(null);
             h.card.setOnClickListener(null);
             h.card.setOnLongClickListener(null);
+            h.card.setLongClickable(false);
             return;
         }
-        h.card.setVisibility(View.VISIBLE);
-        h.card.setFocusable(true);
-        h.name.setText(e.name);
         // The dock has no labels, unless always_show_names asks for them (DockDecoration then makes room in the band).
         // In a single row every tile is the dock's kind: the big title above names it.
         boolean dockKind = DockSlots.inDockRow(dockRow, singleRow, position, dockSize);
-        h.name.setVisibility(dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
         h.inDock = dockKind;
+        h.card.setVisibility(View.VISIBLE);
+        h.card.setFocusable(true);
+        h.name.setVisibility(dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
+        // Apps and the Add app tile share the same settled focus state, including after a rebind.
+        // Stop earlier animations before resetting properties, or they can overwrite this state.
+        h.card.animate().cancel();
+        h.banner.animate().cancel();
+        h.name.animate().cancel();
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
+        float density = ctx.getResources().getDisplayMetrics().density;
         h.name.setAlpha(focused ? 1f : restNameAlpha);
+        h.name.setTranslationY(!animations ? 0f : focused ? 4f * density : -6f * density);
         h.card.setScaleX(focused && animations ? focusScale() : 1f);
         h.card.setScaleY(focused && animations ? focusScale() : 1f);
-        h.card.setTranslationY(focused && advancedEffects && !dockKind ? -4f * ctx.getResources().getDisplayMetrics().density : 0f);
-        h.card.setTranslationZ(focused && advancedEffects ? 8f * ctx.getResources().getDisplayMetrics().density : 0f);
+        h.card.setTranslationY(focused && advancedEffects && !dockKind ? -4f * density : 0f);
+        h.card.setTranslationZ(focused && advancedEffects ? 8f * density : 0f);
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
+        if (library) {
+            h.card.setBackground(h.cardBackground);
+            h.banner.setImageDrawable(null);
+            h.banner.setVisibility(View.GONE);
+            h.label.setVisibility(View.GONE);
+            h.icon.setImageResource(R.drawable.ic_add);
+            h.icon.setVisibility(View.VISIBLE);
+            h.name.setText(R.string.add_app);
+            h.card.setOnClickListener(v -> listener.onLibraryRequested());
+            h.card.setOnLongClickListener(null);
+            h.card.setLongClickable(false);
+            return;
+        }
+        h.name.setText(e.name);
         // A fully opaque banner covers the whole card (centerCrop), so the card's own fill under it is drawn for
         // nothing on every frame; keep it under banners with transparent parts and under icon tiles.
         h.card.setBackground(e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
@@ -662,6 +670,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     String labelAt(int position) {
+        if (isLibraryAt(position)) return ctx.getString(R.string.add_app);
         return position >= 0 && position < items.size() ? items.get(position).label : "";
     }
 
@@ -943,6 +952,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             card.setClipToOutline(true);
 
             card.setOnKeyListener((view, keyCode, event) -> {
+                // Only intercept navigation. View handles OK on release through the bound click listener.
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
                         && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
