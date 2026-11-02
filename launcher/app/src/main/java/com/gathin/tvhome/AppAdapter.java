@@ -60,6 +60,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         void onLibraryFocused();
         /** Hold OK on a tile: the activity shows the tile menu (move, remove from Home, app info). */
         void onTileLongPress(int position, View card);
+
+        /** Hold OK on a tile (Apple TV style): directly pick up the tile to reorder. */
+        void onTilePickUp(int position, View card);
         void onLibraryUp();
         /** A tile whose launch_actions entry is "input:<id>": switch to that TV input instead of opening an app. */
         void onOpenInput(String inputId);
@@ -398,19 +401,6 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        if (viewType == 1) {
-            View row = LayoutInflater.from(ctx).inflate(R.layout.row_app_library, parent, false);
-            View button = row.findViewById(R.id.btnLibrary);
-            button.setOnClickListener(v -> listener.onLibraryRequested());
-            button.setOnFocusChangeListener((v, focused) -> { if (focused) listener.onLibraryFocused(); });
-            button.setOnKeyListener((v, key, event) -> {
-                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (key == KeyEvent.KEYCODE_DPAD_UP) listener.onLibraryUp();
-                return key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN
-                        || key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT;
-            });
-            return new RecyclerView.ViewHolder(row) { };
-        }
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_app, parent, false);
         float density = parent.getResources().getDisplayMetrics().density;
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
@@ -458,8 +448,23 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     @Override
     @SuppressWarnings("deprecation")
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-        if (isLibraryAt(position)) return;
         Holder h = (Holder) holder;
+        if (isLibraryAt(position)) {
+            h.card.setVisibility(View.VISIBLE);
+            h.card.setFocusable(true);
+            h.card.setBackgroundResource(R.drawable.tile_bg);
+            h.banner.setImageDrawable(null);
+            h.banner.setVisibility(View.GONE);
+            h.label.setVisibility(View.GONE);
+            h.icon.setImageResource(R.drawable.ic_add);
+            h.icon.setVisibility(View.VISIBLE);
+            h.name.setText(R.string.add_app);
+            boolean dockKind = dockRow && (singleRow || position < dockSize);
+            h.name.setVisibility(dockKind && restNameAlpha == 0f ? View.INVISIBLE : View.VISIBLE);
+            h.card.setOnClickListener(v -> listener.onLibraryRequested());
+            h.card.setOnLongClickListener(null);
+            return;
+        }
         Entry e = items.get(position);
         if (e.kind == Entry.EMPTY) {
             // A free dock slot keeps its place in the row and the band, but shows nothing and takes no focus.
@@ -511,17 +516,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
-            if (tileMenu) {
-                int pos = h.getBindingAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION) listener.onTileLongPress(pos, v);
-                return true;
-            }
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                ctx.startActivity(i);
-            } catch (ActivityNotFoundException ignored) {
-            }
+            int pos = h.getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION) listener.onTilePickUp(pos, v);
             return true;
         });
     }
@@ -944,10 +940,16 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
             card.setOnKeyListener((view, keyCode, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                int pos = getBindingAdapterPosition();
+                if (pos == RecyclerView.NO_POSITION) return false;
+                if (getItemViewType() == 1 && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                        || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)) {
+                    if (listener != null) listener.onLibraryRequested();
+                    return true;
+                }
                 if (keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
                         && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
-                int pos = getBindingAdapterPosition();
-                return listener != null && pos != RecyclerView.NO_POSITION && listener.onTileVerticalKey(pos, keyCode);
+                return listener != null && listener.onTileVerticalKey(pos, keyCode);
             });
 
             card.setOnFocusChangeListener((view, focused) -> {

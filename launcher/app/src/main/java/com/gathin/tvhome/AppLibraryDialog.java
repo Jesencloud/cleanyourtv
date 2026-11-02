@@ -345,7 +345,8 @@ final class AppLibraryDialog {
     private String hint(boolean home) {
         if (selectionMode) return activity.getString(android.R.string.ok) + ": "
                 + activity.getString(home ? R.string.library_remove_shortcut : R.string.library_add_home);
-        return activity.getString(home || okOpens ? R.string.library_hint_open : R.string.library_hint_add);
+        if (okOpens) return activity.getString(R.string.library_hint_open);
+        return activity.getString(home ? R.string.app_already_on_home : R.string.library_hint_add);
     }
 
     private void showCatalog() {
@@ -664,8 +665,19 @@ final class AppLibraryDialog {
             check.setVisibility(home || recent ? View.VISIBLE : View.GONE);
             holder.itemView.setOnClickListener(v -> {
                 boolean onHomeNow = onHome.test(pkg);
-                if (LibraryApps.okOpens(selectionMode, okOpens, onHomeNow)) open(app);
-                else changeHome(app, !onHomeNow);
+                if (selectionMode) {
+                    changeHome(app, !onHomeNow);
+                    return;
+                }
+                if (okOpens) {
+                    open(app);
+                    return;
+                }
+                if (onHomeNow) {
+                    Toast.makeText(activity, R.string.app_already_on_home, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                changeHome(app, true);
             });
             holder.itemView.setOnLongClickListener(selectionMode ? null : v -> { showActions(app, v); return true; });
             holder.itemView.setOnFocusChangeListener((v, focused) -> {
