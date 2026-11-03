@@ -106,7 +106,6 @@
     <string name="library_remove_shortcut">הסרה ממסך הבית</string>
     <string name="library_open">פתיחה</string>
     <string name="library_app_info">פרטי האפליקציה</string>
-    <string name="app_uninstall">הסרת התקנה</string>
     <string name="add_app">הוספה</string>
     <string name="app_already_on_home">כבר במסך הבית</string>
     <string name="library_save_failed">לא ניתן לשמור את קיצור הדרך</string>
