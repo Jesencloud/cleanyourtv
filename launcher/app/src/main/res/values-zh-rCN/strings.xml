@@ -97,7 +97,7 @@
     <string name="library_remove_shortcut">从主屏幕隐藏</string>
     <string name="library_open">打开</string>
     <string name="library_app_info">应用信息</string>
-    <string name="app_uninstall">卸载此应用</string>
+    <string name="tile_uninstall">卸载</string>
     <string name="add_app">添加应用</string>
     <string name="app_already_on_home">已在桌面上</string>
     <string name="library_save_failed">无法保存快捷方式</string>
