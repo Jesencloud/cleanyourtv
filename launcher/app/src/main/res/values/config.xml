@@ -404,8 +404,8 @@
          group falls back to the whole collection; empty rotates through every picture. A theme can set
          "wallpaper_moods" as an object. -->
     <string name="wallpaper_moods" translatable="false"></string>
-    <!-- The remote's Menu key opens a tile's management menu: Remove from Home (with app_library) and App info where available.
-         True by default; false leaves Menu unchanged. Hold OK or touch and
+    <!-- The remote's Menu key opens a tile's management menu: Remove from Home (with app_library), App info where available,
+         and Uninstall for third-party apps. True by default; false leaves Menu unchanged. Hold OK or touch and
          hold always picks up a tile for reordering, independently of this switch. A theme can set "tile_menu". -->
     <bool name="tile_menu">true</bool>
 

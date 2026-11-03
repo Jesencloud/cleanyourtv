@@ -285,7 +285,7 @@ set is in [Troubleshooting](docs/TROUBLESHOOTING.md).
 | **Themes** | Background, wallpaper and layout from a `config.json` pushed over Wi-Fi, no rebuild. Thirty ship in [`themes/`](themes/), the built-in `default/` included |
 | **31 languages** | Follows the TV's language, with a fully mirrored right-to-left layout for Hebrew |
 | **App library** | Optional: browse every installed app and add or remove Home shortcuts. See [the app library guide](docs/app-library.md) |
-| **Tile menu** | On by default (`tile_menu`): press Menu on a tile for Remove from Home (with `app_library`) and App info where available. Holding OK directly reorders, with the switch on or off |
+| **Tile menu** | On by default (`tile_menu`): press Menu on a tile for Remove from Home (with `app_library`), App info where available, and Uninstall for third-party apps. Holding OK directly reorders, with the switch on or off |
 | **Module cards** | Any TV app can offer its own tile; you approve each one once. See [`docs/modules.md`](docs/modules.md) |
 | **Add-ons** | Optional apps that plug in as module cards, kept in [`addons/`](addons/) and never built into the launcher |
 | **Clock screensaver** | A drifting clock over the glow, so nothing burns in |

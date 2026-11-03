@@ -3821,7 +3821,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         onTilePickUp(position, card);
     }
 
-    /** Menu key on a tile: manage its shortcut or open App info. */
+    /** Menu key on a tile: manage its shortcut, open App info or uninstall a third-party app. */
     @Override
     public void onTileLongPress(int position, View card) {
         if (reordering || openPopup != null) return;
@@ -3840,6 +3840,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Some firmware has no App info page at all; a row that only toasts "can't open" helps nobody.
         Intent info = SystemSettings.appInfo(this, pkg);
         if (info != null) addSettingsMenuRow(rows, popup, R.string.library_app_info, () -> open(info));
+        if (canUninstall(pkg)) {
+            addSettingsMenuRow(rows, popup, R.string.app_uninstall, () -> {
+                open(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + pkg)));
+            }, true);
+        }
         if (rows.getChildCount() == 0) {
             // This popup will never be shown, so its dismiss listener cannot clear the reference.
             openPopup = null;
@@ -3865,12 +3870,37 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rows.getChildAt(0).requestFocus();
     }
 
+    private static final ColorStateList DESTRUCTIVE_TEXT = new ColorStateList(
+            new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
+            new int[]{0xFFD70015, 0xFFFF453A});
+
+    static boolean canUninstall(ApplicationInfo ai) {
+        if (ai == null) return false;
+        // Updated system apps can only lose their updates: keep all system apps out of this menu.
+        return (ai.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) == 0;
+    }
+
+    private boolean canUninstall(String pkg) {
+        try {
+            return canUninstall(getPackageManager().getApplicationInfo(pkg, 0));
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
     private void addSettingsMenuRow(LinearLayout rows, PopupWindow popup, int title, Runnable action) {
+        addSettingsMenuRow(rows, popup, title, action, false);
+    }
+
+    private void addSettingsMenuRow(LinearLayout rows, PopupWindow popup, int title, Runnable action,
+            boolean destructive) {
         View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
         row.findViewById(R.id.icon).setVisibility(View.GONE);
         row.findViewById(R.id.dot).setVisibility(View.GONE);
         row.findViewById(R.id.status).setVisibility(View.GONE);
-        ((TextView) row.findViewById(R.id.title)).setText(title);
+        TextView titleView = (TextView) row.findViewById(R.id.title);
+        titleView.setText(title);
+        if (destructive) titleView.setTextColor(DESTRUCTIVE_TEXT);
         row.setOnClickListener(v -> {
             popup.dismiss();
             action.run();
