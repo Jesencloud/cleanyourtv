@@ -1719,6 +1719,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Ends the mode and saves the order if it changed since the mode started. */
     private void endReorder() {
         if (!reordering) return;
+        ignoreNextOkUp = false;
         dockEditing = false;
         dockEditSlot = -1;
         dockEditAppKey = null;
@@ -3823,6 +3824,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         holdOkKey = null;
         if (holdOkFired) {
             holdOkFired = false;
+            // This release was already consumed here; don't swallow the next OK used to drop the tile.
+            ignoreNextOkUp = false;
             View f = getCurrentFocus();
             if (f != null) f.setPressed(false);
             return true;
