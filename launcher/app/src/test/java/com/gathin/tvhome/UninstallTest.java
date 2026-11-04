@@ -29,9 +29,16 @@ public class UninstallTest {
     }
 
     @Test
-    public void updatedSystemAppCanBeUninstalled() {
+    public void updatedSystemAppCannotBeUninstalled() {
         ApplicationInfo ai = new ApplicationInfo();
         ai.flags = ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
-        assertTrue(MainActivity.canUninstall(ai));
+        assertFalse(MainActivity.canUninstall(ai));
+    }
+
+    @Test
+    public void updatedSystemFlagAloneCannotBeUninstalled() {
+        ApplicationInfo ai = new ApplicationInfo();
+        ai.flags = ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
+        assertFalse(MainActivity.canUninstall(ai));
     }
 }

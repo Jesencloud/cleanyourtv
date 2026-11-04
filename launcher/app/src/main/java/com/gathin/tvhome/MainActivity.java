@@ -3880,8 +3880,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     static boolean canUninstall(ApplicationInfo ai) {
         if (ai == null) return false;
-        return (ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0
-                || (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        // Updated system apps can only lose their updates: keep all system apps out of this menu.
+        return (ai.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) == 0;
     }
 
     private boolean canUninstall(String pkg) {
