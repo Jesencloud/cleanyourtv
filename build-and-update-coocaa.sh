@@ -1,13 +1,39 @@
 #!/bin/bash
 set -e
 
+usage() {
+    cat <<'USAGE'
+用法: build-and-update-coocaa.sh [--clean] [--precompile]
+
+默认增量编译并覆盖安装。
+  --clean       编译前清理构建输出
+  --precompile  安装后强制执行 AOT Speed 预编译
+  --help        显示此说明
+USAGE
+}
+
+CLEAN_BUILD=0
+PRECOMPILE=0
+for arg in "$@"; do
+    case "$arg" in
+        --clean) CLEAN_BUILD=1 ;;
+        --precompile) PRECOMPILE=1 ;;
+        --help|-h) usage; exit 0 ;;
+        *) echo "错误: 未知选项 $arg" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "========================================================"
 echo " 正在编译创维专用 Release APK (com.coocaa.tvhome)..."
 echo "========================================================"
 cd "$DIR/launcher"
-./gradlew --no-daemon clean -PlauncherApplicationId=com.coocaa.tvhome assembleRelease
+BUILD_TASKS=(assembleRelease)
+if [ "$CLEAN_BUILD" -eq 1 ]; then
+    BUILD_TASKS=(clean assembleRelease)
+fi
+./gradlew --no-daemon -PlauncherApplicationId=com.coocaa.tvhome "${BUILD_TASKS[@]}"
 
 APK="$DIR/launcher/app/build/outputs/apk/release/app-release.apk"
 if [ ! -f "$APK" ]; then
@@ -32,10 +58,12 @@ fi
 echo "1. 覆盖安装到电视 (保留壁纸与个性化设置)..."
 adb install -r -d "$APK"
 
-echo "2. 执行 AOT Speed 模式预编译..."
-adb shell cmd package compile -m speed -f com.coocaa.tvhome
+if [ "$PRECOMPILE" -eq 1 ]; then
+    echo "2. 执行 AOT Speed 模式预编译..."
+    adb shell cmd package compile -m speed -f com.coocaa.tvhome
+fi
 
-echo "3. 刷新并唤起主页桌面..."
+echo "刷新并唤起主页桌面..."
 adb shell am force-stop com.coocaa.tvhome 2>/dev/null || true
 adb shell input keyevent 3
 
