@@ -744,9 +744,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         Color.colorToHSV(fallback, hsv);
         // Yellow darkened turns olive: lean it to amber instead.
         if (hsv[0] > 42f && hsv[0] < 70f && hsv[1] > 0.3f) hsv[0] = 36f;
-        hsv[2] = Math.min(hsv[2], 0.62f);
+        // Material 3 tonal container tuning: soften harsh saturation and balance surface brightness
+        hsv[1] = Math.min(hsv[1], 0.72f);
+        hsv[2] = Math.min(hsv[2], 0.58f);
         int top = Color.HSVToColor(hsv);
-        hsv[2] *= 0.6f;
+        hsv[2] *= 0.65f;
         return new int[]{top, Color.HSVToColor(hsv)};
     }
 
@@ -890,9 +892,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return Color.HSVToColor(hsv);
     }
 
-    /** Corner radius for a tile of this width: 16dp at the design width, proportionally less when smaller. */
+    /** Corner radius for a tile of this width: 24dp at the design width (Material 3 Extra Large radius), proportionally less when smaller. */
     static float cornerRadius(int tileWidthPx, float density) {
-        return 16f * density * Math.min(1f, tileWidthPx / (DESIGN_W_DP * density));
+        return 24f * density * Math.min(1f, tileWidthPx / (DESIGN_W_DP * density));
     }
 
     static final class Holder extends RecyclerView.ViewHolder {
