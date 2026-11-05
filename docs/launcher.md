@@ -64,7 +64,7 @@ The launcher's own page has these rows, top to bottom:
 - **Open on start**, only with `open_on_start_choice`: Off, or an app that opens instead of Home the first
   time Home comes up after the TV starts. Once per boot, so Home and Back still reach the launcher.
 - **Follow theme (reset on-TV choices)**, which clears every choice above. Pushing or resetting a theme
-  clears them too.
+  clears the layout, motion, wallpaper, dock opacity and clock format choices.
 - **Choose default home** opens Android's home picker, and **TV system settings** the TV's own settings
   page.
 

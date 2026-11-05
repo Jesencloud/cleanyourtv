@@ -4,7 +4,8 @@ A theme is a folder with a `config.json` and, optionally, a picture: a `wallpape
 collection. Pushing one changes the launcher's dock, layout and look on the TV without rebuilding the
 APK: the launcher reads `config.json` as an overlay over its built-in `config.xml` the next time it starts.
 Choices made in Launcher settings take priority until you choose Follow theme. Pushing a theme or
-using `tools/theme.sh --reset` also clears those on-TV column and motion choices.
+using `tools/theme.sh --reset` also clears the on-TV appearance choices: columns, rows, motion, wallpaper,
+dock opacity and clock format. A reset removes `config.json`; its new theme revision still clears those choices.
 
 ```bash
 TV_HOST=192.168.1.50 tools/theme.sh themes/aurora          # push a theme and restart Home
@@ -119,9 +120,9 @@ A new key needs one there in the same pull request.
 | `library_button` | bool | The app library as a round button in the top bar, beside Settings; needs `app_library`. Closing the library returns to it |
 | `show_library_pill` | bool | The App library pill after the last Home row (`true` by default); `false` hides it while `library_button` is on, so the top-bar button stays the way in and Down from the last row stays put, as with `app_library` off |
 | `always_show_names` | bool | Names under every tile, dimmed until focused, the dock included (its band grows to hold them); `false` by default shows only the focused tile's name |
-| `wallpaper_true_color` | bool | Decode wallpapers in 32-bit colour (8 MB at 1080p) instead of RGB_565 (4 MB), which bands dark gradients such as a night sky; for TVs with 2 GB or more (`false` by default) |
+| `wallpaper_true_color` | bool | Decode wallpapers in 32-bit colour (8 MB at 1080p) instead of RGB_565 (4 MB), which bands dark gradients such as a night sky; for TVs with 2 GB or more (`true` by default in `my-custom`; upstream default: `false`) |
 | `app_library` | bool | An App library pill after the last Home row: every installed app, add one to Home or take it off (`false` by default). The choices stay on the TV when a theme is pushed or reset; see [docs/app-library.md](../docs/app-library.md) |
-| `uniform_tiles` | bool | Each app tile is its icon on a card tinted from that icon, with the name only under the focused tile, instead of the app's own banner (`false` by default) |
+| `uniform_tiles` | bool | Each app tile is its icon on a card tinted from that icon, with the name only under the focused tile, instead of the app's own banner (`true` by default in `my-custom`; upstream default: `false`) |
 | `icon_tiles` | list of package names, `config.xml` only | Apps drawn from their icon and name instead of their banner, for banners that crop badly; empty by default. Not read from a theme |
 | `app_library_selection` | bool | OK toggles Home checkmarks in the library; checked apps first, both groups alphabetized. Hiding keeps focus on the adjacent next app (previous at the end). Requires `app_library`; `false` preserves the standard open/long-press behavior |
 | `library_ok_opens` | bool | OK opens every app in the library, not only the ones on Home, for a library that holds the apps `hidden_apps` keeps off Home; holding OK still offers Add to Home, and cards drop their "Add to Home" line. Requires `app_library`; `app_library_selection` wins when both are on; `false` by default |
@@ -200,13 +201,13 @@ A new key needs one there in the same pull request.
 | `cinematic_scrim` | 0 to 100 | With `cinematic_home`, the strength of the dark scrim behind the shelf's name (`100` by default); lower lets a wallpaper show through |
 | `cinematic_art` | 0 to 100 | With `cinematic_home`, the opacity of the focused app's softened artwork (`50` by default); `0` leaves the wallpaper uncovered |
 | `dock_even_padding` | bool | The dock band's padding equals the gap between its tiles on all four sides, as far as the grid's edges leave room (`false` by default) |
-| `dock_glass` | bool | The dock band as light frosted glass like the top bar's pills (`false` by default); suits `sky_intensity` or a wallpaper, where the solid band reads as a dark slab |
+| `dock_glass` | bool | The dock band as light frosted glass like the top bar's pills (`true` by default in `my-custom`; upstream default: `false`); suits `sky_intensity` or a wallpaper, where the solid band reads as a dark slab |
 | `dock_band` | bool | Draw the dock band and its edge (`true` by default); `false` leaves the tiles floating on the wallpaper with no band, border or dark slab |
 | `single_row` | bool | Every app in the dock's row, the dock apps first, scrolling sideways; no grid below (`false` by default; needs `dock_row`) |
 | `dock_band_all` | bool | With `single_row`, the band runs behind every app in the row, not only the dock apps (`false` by default) |
 | `ambient_glow` | bool | The glow behind the dock in the focused app's colour (`true` by default); `false` keeps only `background_color` or the wallpaper, e.g. for a calm photo background |
 | `glow_snap` | bool | The ambient glow takes the next app's colour in one frame instead of dimming and fading back in. Each frame of the fade repaints the whole screen, so on a slow GPU (a Mali-G52 on a Xiaomi MiTV-MOEU0) it cut the late frames on Home from 60% to 27%. `false` by default |
-| `app_glow` | bool | The focus highlight glows in the focused app's colour on every tile, as `cinematic_home` does for the dock (`false` by default) |
+| `app_glow` | bool | The focus highlight glows in the focused app's colour on every tile, as `cinematic_home` does for the dock (`true` by default in `my-custom`; upstream default: `false`) |
 | `fade_rows` | bool | The rows fade out as they scroll up under the clock instead of being cut off at a hard line; the wallpaper or sky shows through. The grid then draws into a hardware layer (about 6 MB of graphics memory at 1080p) (`false` by default) |
 
 ## Wallpapers

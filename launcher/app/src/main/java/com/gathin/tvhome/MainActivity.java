@@ -454,6 +454,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** clock_format, for the race panel's session times (the TextClocks take it in onCreate). */
     private String clockFormat = "system";
     private java.util.Map<Integer, String> homeHoldAppKeys = java.util.Collections.emptyMap();
+    private boolean storageUnmounted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -462,6 +463,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
+        storageUnmounted = cfg.storageUnmounted;
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
         clockFormat = cfg.clockFormat;
         ClockFormat.apply(getWindow().getDecorView(), clockFormat);
@@ -1102,6 +1104,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (Config.settingsChanged(settingsRevision, settingsRevision())) {
             recreate();
             return;
+        }
+        if (storageUnmounted && Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
+            File dir = Config.dir(this);
+            if (dir != null && dir.isDirectory() && dir.canRead()) {
+                storageUnmounted = false;
+                recreate();
+                return;
+            }
         }
         restartIdleClock();
         promptsPaused = false;

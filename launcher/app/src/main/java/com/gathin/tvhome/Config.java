@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,6 +221,8 @@ final class Config {
     final String wallpaperOrder;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
+    /** Whether external storage was not yet mounted when this configuration was loaded. */
+    final boolean storageUnmounted;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
     final Festival festival;
     /** F1 weekends from a theme's race_calendar (see RaceWeekend); empty when the theme has none. */
@@ -292,7 +295,7 @@ final class Config {
                    boolean shamsiDate, String greetingName, boolean moduleCards, boolean reducedMotion, boolean bootToLiveTv, boolean openOnStartChoice, boolean dockTitle, boolean dockRow, boolean topMenu, boolean launcherSettingsButton, boolean reorderButton, boolean showNetworkPill, boolean showInputsPill, boolean iconOnlyButtons, boolean iconOnlyInputs, boolean libraryButton, boolean showLibraryPill, int wifiLabelWidth, boolean alwaysShowNames, boolean wallpaperTrueColor, boolean focusOvershoot, String vpnApp,
                    boolean showHomeSettingsShortcut, boolean showStats, String gameDay, boolean appLibrary, boolean appLibrarySelection, boolean libraryOkOpens, boolean uniformTiles, int backgroundColor, int skyIntensity,
                    int[] settingsKeycodes, boolean settingsKeyPanel, boolean restoreKeyServices, boolean wallpaperEnabled, File wallpaper, List<File> wallpapers,
-                   int wallpaperRotationMinutes, int wallpaperDim, int dockOpacity, String wallpaperOrder, boolean overlayApplied,
+                   int wallpaperRotationMinutes, int wallpaperDim, int dockOpacity, String wallpaperOrder, boolean overlayApplied, boolean storageUnmounted,
                    Festival festival, int[] inputKeycodes, List<String> appKeys, String stockHomeRedirect,
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, boolean appGlow, boolean fadeRows, int homeIdleClockMinutes,
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
@@ -379,6 +382,7 @@ final class Config {
         this.dockOpacity = dockOpacity;
         this.wallpaperOrder = wallpaperOrder;
         this.overlayApplied = overlayApplied;
+        this.storageUnmounted = storageUnmounted;
         this.festival = festival;
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
         this.cinematicHome = cinematicHome;
@@ -674,7 +678,7 @@ final class Config {
         // A theme push or reset invalidates choices made on the TV. On first use, remember the
         // current theme without clearing choices from an older launcher version.
         SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
-        // Unmounted storage looks like a theme reset; compare only once the file is readable.
+        // Unmounted storage looks like a theme reset; compare only once storage is available.
         if (mounted) syncThemeChoices(choices, dir, file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
@@ -682,13 +686,20 @@ final class Config {
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
         advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
-        File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
-        if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
         // A theme can also switch the wallpaper off while the file is still there.
         boolean wallpaperEnabled = json == null || bool(json, "wallpaper", true);
-        if (!wallpaperEnabled) wallpaper = null;
+        File wallpaper = (dir != null && wallpaperEnabled) ? new File(dir, WALLPAPER_NAME) : null;
+        if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
+        File internalWallpaper = new File(ctx.getFilesDir(), WALLPAPER_NAME);
+        if (wallpaper != null) {
+            syncFile(wallpaper, internalWallpaper);
+        } else if (!mounted && internalWallpaper.isFile() && internalWallpaper.length() > 0 && wallpaperEnabled) {
+            wallpaper = internalWallpaper;
+        } else if (mounted || !wallpaperEnabled) {
+            internalWallpaper.delete();
+        }
         int rotationMinutes = json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440);
-        int wallpaperDim = json == null ? 0 : integer(json, "wallpaper_dim", 0, 0, 90);
+        int wallpaperDim = json == null ? 20 : integer(json, "wallpaper_dim", 20, 0, 90);
         int dockOpacity = json == null ? 100 : integer(json, "dock_opacity", 100, 30, 100);
         dockOpacity = chosenDockOpacity(choices.getInt(DOCK_OPACITY_KEY, -1), dockOpacity);
         clockFormat = choices.getString(CLOCK_FORMAT_KEY, clockFormat);
@@ -724,7 +735,7 @@ final class Config {
                 iconOnlyButtons, iconOnlyInputs, libraryButton, showLibraryPill, wifiLabelWidth, alwaysShowNames, wallpaperTrueColor, focusOvershoot,
                 vpn, homeSettings, showStats, gameDay, library, librarySelection, libraryOkOpens, uniformTiles, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, restoreKeyServices, wallpaperEnabled, wallpaper,
-                wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, applied, festival, inputKeycodes, appKeys, stockHomeRedirect,
+                wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, applied, !mounted, festival, inputKeycodes, appKeys, stockHomeRedirect,
                 json == null ? Collections.emptyList() : raceCalendar(json), cinematic, ambientGlow, appGlow, fadeRows,
                 Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding,
                 dockBand, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough,
@@ -766,9 +777,14 @@ final class Config {
     }
 
     private static void syncThemeChoices(SharedPreferences choices, File dir, File config) {
-        File revision = dir == null ? null : new File(dir, THEME_REVISION_NAME);
+        // A reset deliberately removes config.json. Its absence is meaningful only in an accessible directory;
+        // unavailable storage must not erase the owner's choices or record a reset signature.
+        if (dir == null || config == null || !dir.isDirectory() || !dir.canRead() || !dir.canExecute()) return;
+        File revision = new File(dir, THEME_REVISION_NAME);
         String token = revisionToken(revision);
-        String signature = fileStamp(config) + ":" + token;
+        String stamp = fileStamp(config);
+        if (token == null || stamp == null) return;   // incomplete or unreadable files: retry next load
+        String signature = stamp + ":" + token;
         String seen = choices.getString(THEME_SIGNATURE_KEY, null);
         if (seen == null) {
             // Existing preferences survive an app upgrade, unless the first launch follows an
@@ -791,17 +807,24 @@ final class Config {
     }
 
     private static String fileStamp(File file) {
-        return file != null && file.isFile() ? file.length() + "@" + file.lastModified() : "absent";
+        if (file == null || !file.exists()) return "absent";
+        if (!file.isFile() || !file.canRead()) return null;
+        return file.length() + "@" + file.lastModified();
     }
 
     private static String revisionToken(File file) {
-        if (file == null || !file.isFile() || file.length() > 64) return "absent";
+        if (file == null || !file.exists()) return "absent";
+        if (!file.isFile()) return null;
+        long size = file.length();
+        if (size <= 0 || size > 64) return null;   // an empty marker may still be getting written
         try (InputStream in = new FileInputStream(file)) {
-            byte[] bytes = new byte[(int) file.length()];
-            int n = in.read(bytes);
-            return n > 0 ? new String(bytes, 0, n, StandardCharsets.US_ASCII) : "absent";
+            byte[] bytes = new byte[(int) size];
+            int n = 0, r;
+            while (n < bytes.length && (r = in.read(bytes, n, bytes.length - n)) > 0) n += r;
+            if (n < bytes.length || in.read() != -1) return null;   // changed during the read: retry
+            return new String(bytes, 0, n, StandardCharsets.US_ASCII);
         } catch (Exception ignored) {
-            return "absent";
+            return null;
         }
     }
 
@@ -817,14 +840,97 @@ final class Config {
         JSONObject json = read(file);
         if (json == null) {
             copy.delete();
-        } else {
-            try (FileOutputStream out = new FileOutputStream(copy)) {
-                out.write(json.toString().getBytes(StandardCharsets.UTF_8));
-            } catch (IOException e) {
-                Log.w(TAG, "could not keep a copy of " + file + ": " + e.getMessage());
-            }
+            return null;
+        }
+        JSONObject cached = read(copy);
+        if (!jsonEquals(json, cached)) {
+            writeAtomically(copy, json.toString());
         }
         return json;
+    }
+
+    private static void writeAtomically(File dst, String content) {
+        synchronized (SYNC_LOCK) {
+            File parent = dst.getParentFile();
+            if (parent == null) return;
+            File tmp = new File(parent, dst.getName() + ".tmp");
+            try (FileOutputStream out = new FileOutputStream(tmp)) {
+                out.write(content.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            } catch (IOException e) {
+                tmp.delete();
+                Log.w(TAG, "could not write copy of " + dst + ": " + e.getMessage());
+                return;
+            }
+            if (!tmp.renameTo(dst)) {
+                tmp.delete();
+            }
+        }
+    }
+
+    static boolean jsonEquals(JSONObject a, JSONObject b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a.length() != b.length()) return false;
+        Iterator<String> keys = a.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!b.has(key)) return false;
+            Object valA = a.opt(key);
+            Object valB = b.opt(key);
+            if (!valueEquals(valA, valB)) return false;
+        }
+        return true;
+    }
+
+    static boolean jsonEquals(JSONArray a, JSONArray b) {
+        if (a == b) return true;
+        if (a == null || b == null || a.length() != b.length()) return false;
+        for (int i = 0; i < a.length(); i++) {
+            if (!valueEquals(a.opt(i), b.opt(i))) return false;
+        }
+        return true;
+    }
+
+    private static boolean valueEquals(Object a, Object b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a instanceof JSONObject && b instanceof JSONObject) {
+            return jsonEquals((JSONObject) a, (JSONObject) b);
+        }
+        if (a instanceof JSONArray && b instanceof JSONArray) {
+            return jsonEquals((JSONArray) a, (JSONArray) b);
+        }
+        if (a instanceof Number && b instanceof Number) {
+            return Double.compare(((Number) a).doubleValue(), ((Number) b).doubleValue()) == 0;
+        }
+        return a.equals(b);
+    }
+
+    private static final Object SYNC_LOCK = new Object();
+
+    static void syncFile(File src, File dst) {
+        if (src == null || !src.isFile()) return;
+        if (dst.isFile() && dst.length() == src.length() && dst.lastModified() == src.lastModified()) return;
+        synchronized (SYNC_LOCK) {
+            File parent = dst.getParentFile();
+            if (parent == null) return;
+            File tmp = new File(parent, dst.getName() + ".tmp");
+            try (InputStream in = new FileInputStream(src);
+                 FileOutputStream out = new FileOutputStream(tmp)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.flush();
+            } catch (IOException ignored) {
+                tmp.delete();
+                return;
+            }
+            tmp.setLastModified(src.lastModified());
+            if (!tmp.renameTo(dst)) {
+                tmp.delete();
+            }
+        }
     }
 
     private static JSONObject read(File file) {
