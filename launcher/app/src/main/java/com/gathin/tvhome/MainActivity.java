@@ -1135,6 +1135,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             recreate();
             return;
         }
+        if (wallpaperPlayer != null && !wallpaperPlayer.hasWallpaper()) {
+            Config check = Config.load(this);
+            if (check.wallpaper != null) {
+                recreate();
+                return;
+            }
+        }
         restartIdleClock();
         promptsPaused = false;
         if (grid.getAdapter() == null) grid.setAdapter(adapter);   // dropped by onTrimMemory
