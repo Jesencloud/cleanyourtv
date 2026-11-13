@@ -317,7 +317,7 @@
     <!-- The dock band as light frosted glass, like the Inputs, Wi-Fi and Settings pills, so a sky or wallpaper shows
          through it. false (the default) keeps the solid near-black band, or the cinematic shelf's dark glass. Can
          also be set with "dock_glass": true in a theme's config.json. -->
-    <bool name="dock_glass">true</bool>
+    <bool name="dock_glass">false</bool>
     <!-- Draw the dock band and its edge. false leaves the tiles floating on the wallpaper (config.xml dock_band). -->
     <bool name="dock_band">true</bool>
     <!-- Every app in one row: the dock apps first, the rest after them, and the row scrolls sideways when focus
@@ -391,7 +391,7 @@
     <bool name="always_show_names">false</bool>
     <!-- Wallpapers decode as RGB_565 (2 bytes a pixel, 4 MB at 1080p), which bands dark gradients such as a night
          sky, most of all under wallpaper_dim. true decodes them in 32-bit colour: 8 MB, for TVs with 2 GB or more. -->
-    <bool name="wallpaper_true_color">true</bool>
+    <bool name="wallpaper_true_color">false</bool>
     <!-- Rotating wallpapers: show each picture's name under the top-right buttons, from a captions.txt next to the
          pictures in wallpapers/ ("01-dusk.jpg<TAB>Dusk over the peaks", one per line). A picture without a line
          shows no name. Can also be set with "wallpaper_captions": true in a theme's config.json. -->
@@ -432,7 +432,7 @@
     <bool name="app_library">false</bool>
     <!-- Every app tile is its icon on a card tinted from that icon, name only under the focused tile,
          instead of each app's own banner. Off by default; a theme can set "uniform_tiles": true. -->
-    <bool name="uniform_tiles">true</bool>
+    <bool name="uniform_tiles">false</bool>
     <!-- Optional direct Home picker in the app library: OK toggles the checkmark, checked apps first.
          Off by default; a theme can set "app_library_selection": true (also needs app_library). -->
     <bool name="app_library_selection">false</bool>
@@ -526,7 +526,7 @@
     <bool name="glow_snap">false</bool>
     <!-- The focus highlight glows in the focused app's colour on every tile, as the cinematic shelf does for the
          dock, without cinematic_home. Can also be set with "app_glow": true in a theme's config.json. -->
-    <bool name="app_glow">true</bool>
+    <bool name="app_glow">false</bool>
     <!-- The rows fade out as they scroll up under the clock, instead of being cut off at a hard line (TopFade).
          The grid then draws into a hardware layer, about 6 MB of graphics memory at 1080p, so it is off by default.
          Can also be set with "fade_rows": true in a theme's config.json. -->
